@@ -150,7 +150,12 @@ class Htp1:
         try:
             while True:
                 msg = await self._websocket.receive()
-                if msg.type == aiohttp.WSMsgType.CLOSE:
+                if msg.type in (
+                    aiohttp.WSMsgType.CLOSE,
+                    aiohttp.WSMsgType.CLOSING,
+                    aiohttp.WSMsgType.CLOSED,
+                    aiohttp.WSMsgType.ERROR,
+                ):
                     await self.try_connect()
                     await self._notify("#connection")
                     break
