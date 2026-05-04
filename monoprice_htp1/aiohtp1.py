@@ -181,8 +181,8 @@ class Htp1:
     async def stop(self):
         """Disconnect from the HTP-1 device and shut down any running background tasks."""
         self.log.debug("stop:")
-        self._stop_connect()
-        self._disconnect()
+        await self._stop_connect()
+        await self._disconnect()
         self.reset()
 
     ## Handlers
