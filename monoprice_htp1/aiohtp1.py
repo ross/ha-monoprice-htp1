@@ -270,7 +270,11 @@ class Htp1:
             for k, v in self._tx.items()
         ]
         payload = dumps(ops, separators=(",", ":"))
-        await self._websocket.send_str(f"changemso {payload}")
+        try:
+            await self._websocket.send_str(f"changemso {payload}")
+        except aiohttp.ClientConnectionResetError:
+            self.log.warning("commit: connection reset while sending")
+            return False
 
         self._tx = {}
         return True
