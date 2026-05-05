@@ -176,7 +176,7 @@ class Htp1:
                         await handler(payload)
                     except Exception:
                         # don't exit if a handler has a problem, just log it
-                        self.log.exception("_recveive: handler=%s, threw an exception")
+                        self.log.exception("_recveive: handler=%s, threw an exception", cmd)
         finally:
             # self._recveive_task = None
             self.log.debug("_recveive:   exited loop")
