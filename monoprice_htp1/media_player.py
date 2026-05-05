@@ -58,8 +58,9 @@ class Htp1MediaPlayer(MediaPlayerEntity):
         LOGGER.debug("_updated")
         htp1 = self.htp1
         self._attr_available = htp1.connected
-        # set the volume step so that it'll be equivalent to 1db
-        self._attr_volume_step = 1 / (htp1.cal_vph - htp1.cal_vpl)
+        if htp1.connected:
+            # set the volume step so that it'll be equivalent to 1db
+            self._attr_volume_step = 1 / (htp1.cal_vph - htp1.cal_vpl)
         # self.async_write_ha_state()
         self.async_schedule_update_ha_state()
 
