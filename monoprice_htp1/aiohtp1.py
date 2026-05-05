@@ -142,9 +142,10 @@ class Htp1:
     async def _stop_connect(self):
         self.log.debug("_stop_connect:")
         self._trying_to_connect = False
-        self._try_connect_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await self._try_connect_task
+        if self._try_connect_task is not None:
+            self._try_connect_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._try_connect_task
         self.log.debug("_stop_connect: done")
 
     async def _recveive(self):
