@@ -1,0 +1,16 @@
+[project]
+name = "ha-monoprice-htp1"
+version = "0.0.1"
+requires-python = ">=3.13"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "aiohttp",
+    "aiodns",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
