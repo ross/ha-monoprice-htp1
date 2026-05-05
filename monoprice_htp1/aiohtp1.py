@@ -115,6 +115,8 @@ class Htp1:
 
     async def try_connect(self):
         """Start the process of persistently trying to connect to the HTP-1 device."""
+        if self._try_connect_task is not None and not self._try_connect_task.done():
+            return
         self._try_connect_task = asyncio.create_task(self._try_connect())
 
     async def _try_connect(self):
