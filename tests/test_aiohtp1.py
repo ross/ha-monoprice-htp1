@@ -74,6 +74,14 @@ async def test_connect_raises_on_dns_error(htp1):
     assert not htp1.connected
 
 
+async def test_connect_raises_on_session_closed(htp1):
+    """Regression: RuntimeError('Session is closed') during HA shutdown is caught as ConnectionException."""
+    htp1.session.queue_failure(RuntimeError("Session is closed"))
+    with pytest.raises(ConnectionException):
+        await htp1.connect()
+    assert not htp1.connected
+
+
 # ── State properties ──────────────────────────────────────────────────────────
 
 async def test_state_properties_after_mso(connected_htp1, mso_payload):

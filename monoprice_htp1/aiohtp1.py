@@ -86,6 +86,7 @@ class Htp1:
                 await self._state_ready.wait()
         except (
             TimeoutError,
+            RuntimeError,
             aiodns.error.DNSError,
             aiohttp.client_exceptions.ClientError,
             asyncio.CancelledError,
