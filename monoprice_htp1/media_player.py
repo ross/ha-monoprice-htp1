@@ -158,11 +158,6 @@ class Htp1MediaPlayer(MediaPlayerEntity):
             await tx.commit()
 
     @property
-    def source_id(self):
-        """ID of the current input source."""
-        return self.htp1.input
-
-    @property
     def source(self):
         """Name of the current input source."""
         return self.htp1.input

@@ -1,7 +1,5 @@
 """The Monoprice HTP-1 integration."""
 
-from datetime import timedelta
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant
@@ -11,7 +9,6 @@ from .const import DOMAIN
 from .helpers import async_get_clientsession
 
 PLATFORMS: list[Platform] = [Platform.MEDIA_PLAYER]
-SCAN_INTERVAL = timedelta(seconds=30)
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
