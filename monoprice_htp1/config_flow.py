@@ -77,6 +77,6 @@ class ConfigFlow(_ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             host_default = user_input.get(CONF_HOST, host_default)
         return await self.async_step_user(
-            user_input=dict(user_input),
+            user_input=dict(user_input) if user_input is not None else None,
             host_default=host_default,
         )
