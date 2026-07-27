@@ -50,6 +50,7 @@ class Htp1:
         self._state_ready: asyncio.Event = asyncio.Event()
         self._tx: dict[str, Any] | None = None
         self._trying_to_connect: bool = False
+        self._unhandled_cmds: set[str] = set()
 
         self.reset()
 
@@ -108,7 +109,12 @@ class Htp1:
             # if our receiving handler is running, stop it
             self._recveive_task.cancel()
             with suppress(asyncio.CancelledError):
-                await self._recveive_task
+                try:
+                    await self._recveive_task
+                except Exception:
+                    self.log.exception(
+                        "_disconnect: receive task exited with an exception"
+                    )
             self._recveive_task = None
         # websocket is no longer valid
         self._websocket = None
@@ -168,19 +174,34 @@ class Htp1:
                     continue
                 msg = msg.data
                 self.log.debug("_recveive:   msg=%s", msg[:100])
-                cmd, payload = msg.split(" ", 1)
+                # some messages (e.g. keepalives) have no payload, just a
+                # bare command with no trailing space
+                cmd, _, payload = msg.partition(" ")
                 handler = getattr(self, f"_cmd_{cmd}", None)
-                if handler:
+                if handler is None:
+                    self._log_unhandled(cmd)
+                    continue
+                try:
                     # parse the (json) payload
-                    payload = loads(payload)
-                    try:
-                        await handler(payload)
-                    except Exception:
-                        # don't exit if a handler has a problem, just log it
-                        self.log.exception("_recveive: handler=%s, threw an exception", cmd)
+                    await handler(loads(payload))
+                except Exception:
+                    # don't exit if a handler has a problem, just log it
+                    self.log.exception("_recveive: handler=%s, threw an exception", cmd)
+        except Exception:
+            # don't let an unexpected error kill the loop silently, log it so
+            # it's visible instead of only surfacing later when something
+            # awaits this task (e.g. during teardown)
+            self.log.exception("_recveive:   receive loop failed")
         finally:
             # self._recveive_task = None
             self.log.debug("_recveive:   exited loop")
+
+    def _log_unhandled(self, cmd):
+        if cmd in self._unhandled_cmds:
+            self.log.debug("_recveive:   no handler for cmd=%s", cmd)
+            return
+        self._unhandled_cmds.add(cmd)
+        self.log.warning("_recveive:   no handler for cmd=%s", cmd)
 
     async def stop(self):
         """Disconnect from the HTP-1 device and shut down any running background tasks."""
