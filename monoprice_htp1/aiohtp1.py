@@ -174,16 +174,37 @@ class Htp1:
                     continue
                 msg = msg.data
                 self.log.debug("_recveive:   msg=%s", msg[:100])
-                # some messages (e.g. keepalives) have no payload, just a
-                # bare command with no trailing space
-                cmd, _, payload = msg.partition(" ")
-                handler = getattr(self, f"_cmd_{cmd}", None)
+                if msg.startswith("{"):
+                    # newer firmware also sends bare JSON frames with no
+                    # "cmd payload" prefix, keyed by a "type" field, e.g.
+                    # {"type": "ping", "timestamp": 1785115446215}
+                    try:
+                        payload = loads(msg)
+                    except ValueError:
+                        self.log.exception("_recveive: failed to parse JSON message")
+                        continue
+                    cmd = payload.get("type", "")
+                    handler = getattr(self, f"_cmd_{cmd}", None)
+                else:
+                    # some messages have no payload, just a bare command
+                    # with no trailing space
+                    cmd, _, raw_payload = msg.partition(" ")
+                    handler = getattr(self, f"_cmd_{cmd}", None)
+                    if handler is None:
+                        self._log_unhandled(cmd)
+                        continue
+                    try:
+                        payload = loads(raw_payload) if raw_payload else None
+                    except ValueError:
+                        self.log.exception(
+                            "_recveive: failed to parse JSON payload for cmd=%s", cmd
+                        )
+                        continue
                 if handler is None:
                     self._log_unhandled(cmd)
                     continue
                 try:
-                    # parse the (json) payload
-                    await handler(loads(payload))
+                    await handler(payload)
                 except Exception:
                     # don't exit if a handler has a problem, just log it
                     self.log.exception("_recveive: handler=%s, threw an exception", cmd)
@@ -211,6 +232,10 @@ class Htp1:
         self.reset()
 
     ## Handlers
+
+    async def _cmd_ping(self, payload):
+        """Ignore keepalive pings sent periodically by the HTP-1."""
+        self.log.debug("_cmd_ping: payload=%s", payload)
 
     async def _cmd_mso(self, payload):
         self.log.debug("_cmd_mso: payload=***")
