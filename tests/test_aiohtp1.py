@@ -426,3 +426,109 @@ async def test_handler_exception_logs_cmd_name(connected_htp1, caplog):
     with caplog.at_level(logging.ERROR, logger="aiohtp1"):
         await drain()
     assert any("msoupdate" in r.message for r in caplog.records)
+
+
+# ── Payload-less / unknown messages ─────────────────────────────────────────────
+# Regression for newer HTP-1 firmware sending bare commands (e.g. a keepalive)
+# with no trailing " payload", which used to raise ValueError out of the
+# receive loop and kill it: cmd, payload = msg.split(" ", 1)
+
+async def test_bareword_message_does_not_kill_receive_loop(connected_htp1):
+    htp1, ws = connected_htp1
+    ws.push_text("somebareword")  # no space, no payload, unknown command
+    await drain()
+    # the loop must still be alive to process this
+    ws.push_msoupdate({"op": "replace", "path": "/volume", "value": -7.0})
+    await drain()
+    assert htp1.volume == -7.0
+
+
+async def test_unknown_command_with_payload_ignored(connected_htp1):
+    htp1, ws = connected_htp1
+    ws.push_text('somenewcmd {"foo": "bar"}')
+    await drain()
+    ws.push_msoupdate({"op": "replace", "path": "/volume", "value": -8.0})
+    await drain()
+    assert htp1.volume == -8.0
+
+
+async def test_malformed_json_on_known_command_does_not_kill_loop(connected_htp1):
+    htp1, ws = connected_htp1
+    ws.push_text("msoupdate {not valid json")
+    await drain()
+    ws.push_msoupdate({"op": "replace", "path": "/volume", "value": -9.0})
+    await drain()
+    assert htp1.volume == -9.0
+
+
+async def test_unhandled_command_warns_once(connected_htp1, caplog):
+    htp1, ws = connected_htp1
+    with caplog.at_level(logging.WARNING, logger="aiohtp1"):
+        ws.push_text("somebareword")
+        await drain()
+        ws.push_text("somebareword")
+        await drain()
+    warnings = [
+        r for r in caplog.records
+        if r.levelno == logging.WARNING and "somebareword" in r.message
+    ]
+    assert len(warnings) == 1
+
+
+# ── Bare JSON "type"-keyed frames (e.g. keepalive pings) ────────────────────────
+# Newer HTP-1 firmware also sends whole messages that are just a JSON object
+# with a "type" field and no "cmd payload" prefix at all, e.g.
+# {"type": "ping", "timestamp": 1785115446215}. Since there's no space, the
+# naive split/partition approach would treat the *entire*, ever-changing
+# (different timestamp each time) message as the command name, defeating any
+# de-duplicated "unhandled command" warning and spamming the log once per
+# ping instead of once ever.
+
+async def test_json_ping_is_silently_ignored(connected_htp1, caplog):
+    htp1, ws = connected_htp1
+    with caplog.at_level(logging.WARNING, logger="aiohtp1"):
+        ws.push_text(dumps({"type": "ping", "timestamp": 1785115446215}))
+        await drain()
+        ws.push_text(dumps({"type": "ping", "timestamp": 1785115446999}))
+        await drain()
+    assert caplog.records == []
+    # loop must still be alive
+    ws.push_msoupdate({"op": "replace", "path": "/volume", "value": -6.0})
+    await drain()
+    assert htp1.volume == -6.0
+
+
+async def test_unknown_json_type_warns_once_by_type_not_full_payload(connected_htp1, caplog):
+    htp1, ws = connected_htp1
+    with caplog.at_level(logging.WARNING, logger="aiohtp1"):
+        ws.push_text(dumps({"type": "someothertype", "timestamp": 1}))
+        await drain()
+        ws.push_text(dumps({"type": "someothertype", "timestamp": 2}))
+        await drain()
+    warnings = [
+        r for r in caplog.records
+        if r.levelno == logging.WARNING and "someothertype" in r.message
+    ]
+    assert len(warnings) == 1
+
+
+async def test_malformed_bare_json_does_not_kill_receive_loop(connected_htp1):
+    htp1, ws = connected_htp1
+    ws.push_text("{not valid json")
+    await drain()
+    ws.push_msoupdate({"op": "replace", "path": "/volume", "value": -11.0})
+    await drain()
+    assert htp1.volume == -11.0
+
+
+async def test_stop_does_not_reraise_receive_task_exception(htp1):
+    """Regression: if the receive task ended with a stored exception, stop()
+    (via _disconnect) must not propagate it, since HA awaits stop() while
+    tearing down the entity and a raise there breaks entity removal.
+    """
+
+    async def _boom():
+        raise ValueError("simulated pre-fix crash")
+
+    htp1._recveive_task = asyncio.create_task(_boom())
+    await htp1.stop()  # must not raise
